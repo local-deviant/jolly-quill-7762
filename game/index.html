@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AETHER RUSH — 3D hover-racer</title>
+<style>
+  :root {
+    --amber: #ffb03a;
+    --cyan: #35e0ff;
+    --green: #37e08a;
+    --red: #ff3b4e;
+    --ink: #fff6e8;
+    --panel: rgba(12, 8, 28, 0.62);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #2a1a3e; }
+  body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; color: var(--ink); }
+  #game-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  .panel { background: var(--panel); border: 1px solid rgba(255, 176, 58, 0.45); border-radius: 10px; backdrop-filter: blur(3px); }
+  #hud-topleft { position: absolute; top: 14px; left: 14px; padding: 10px 14px; line-height: 1.35; }
+  #hud-lap { font-size: 22px; font-weight: 800; letter-spacing: 1px; color: var(--amber); }
+  #hud-time { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  #hud-time.danger { color: var(--red); }
+  #hud-gate { font-size: 14px; color: var(--cyan); font-weight: 700; letter-spacing: 1px; }
+  #hud-topright { position: absolute; top: 14px; right: 14px; padding: 10px 14px; text-align: right; line-height: 1.35; }
+  #hud-speed { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  #hud-orbs { font-size: 16px; font-weight: 700; color: #ffe066; }
+  #hud-bars { position: absolute; left: 14px; bottom: 14px; padding: 10px 14px; width: 240px; }
+  .bar-label { font-size: 12px; font-weight: 700; letter-spacing: 1px; display: flex; justify-content: space-between; }
+  .bar { height: 12px; border-radius: 6px; background: rgba(255, 255, 255, 0.14); margin: 3px 0 8px; overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 6px; transition: width 0.15s linear; }
+  #hud-hull-fill { width: 100%; background: linear-gradient(90deg, #37e08a, #7df0ae); }
+  #hud-hull-fill.danger { background: linear-gradient(90deg, #ff3b4e, #ff7a5c); }
+  #hud-boost-fill { width: 100%; background: linear-gradient(90deg, #35e0ff, #7df3ff); }
+  #hud-arrow-wrap { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; }
+  #hud-arrow { font-size: 34px; color: var(--cyan); display: inline-block; text-shadow: 0 0 12px rgba(53, 224, 255, 0.8); }
+  #hud-banner { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); font-size: 24px; font-weight: 800; letter-spacing: 1px; color: var(--amber); text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7); opacity: 0; transition: opacity 0.25s; white-space: nowrap; }
+  #minimap { position: absolute; right: 14px; bottom: 14px; border: 1px solid rgba(255, 176, 58, 0.45); border-radius: 10px; background: rgba(12, 8, 28, 0.55); }
+  #hud-help { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); font-size: 12px; opacity: 0.75; letter-spacing: 0.5px; }
+
+  .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 10; background: radial-gradient(ellipse at center, rgba(20, 10, 40, 0.25), rgba(10, 5, 24, 0.78)); }
+  .screen.hidden { display: none; }
+  .card { text-align: center; max-width: 640px; padding: 34px 44px; background: var(--panel); border: 1px solid rgba(255, 176, 58, 0.55); border-radius: 18px; }
+  .card h1 { font-size: 56px; letter-spacing: 6px; color: var(--amber); text-shadow: 0 0 26px rgba(255, 176, 58, 0.55); }
+  .card h2 { font-size: 44px; letter-spacing: 3px; }
+  .card h2.win { color: var(--green); }
+  .card h2.lose { color: var(--red); }
+  .tagline { font-size: 17px; color: var(--cyan); margin: 6px 0 16px; font-weight: 600; }
+  .goal { font-size: 16px; line-height: 1.55; margin-bottom: 14px; }
+  .controls { font-size: 14px; line-height: 1.9; margin-bottom: 16px; color: #ffe9c9; }
+  .controls b { color: var(--amber); }
+  .stats { font-size: 19px; line-height: 1.7; margin: 12px 0 18px; font-variant-numeric: tabular-nums; }
+  .best { font-size: 15px; color: #ffe066; font-weight: 700; margin-bottom: 18px; }
+  button { pointer-events: auto; cursor: pointer; font-size: 19px; font-weight: 800; letter-spacing: 2px; color: #1c1030; background: linear-gradient(180deg, #ffd27a, #ff9a2a); border: none; border-radius: 12px; padding: 13px 34px; }
+  button:hover { filter: brightness(1.1); }
+  .hint { margin-top: 14px; font-size: 13px; opacity: 0.8; }
+  #countdown-num { font-size: 120px; font-weight: 900; color: var(--amber); text-shadow: 0 0 40px rgba(255, 176, 58, 0.8); }
+  #screen-countdown { background: rgba(10, 5, 24, 0.25); }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game-canvas"></canvas>
+
+<div id="hud">
+  <div id="hud-topleft" class="panel">
+    <div id="hud-lap">LAP 1/3</div>
+    <div id="hud-time">2:30</div>
+    <div id="hud-gate">GATE 1/12</div>
+  </div>
+  <div id="hud-topright" class="panel">
+    <div id="hud-speed">0 km/h</div>
+    <div id="hud-orbs">◆ 0/24</div>
+  </div>
+  <div id="hud-arrow-wrap"><div id="hud-arrow">▲</div></div>
+  <div id="hud-banner"></div>
+  <div id="hud-bars" class="panel">
+    <div class="bar-label"><span>HULL</span><span>BOOST — SPACE</span></div>
+    <div class="bar"><div id="hud-hull-fill"></div></div>
+    <div class="bar"><div id="hud-boost-fill"></div></div>
+  </div>
+  <canvas id="minimap" width="160" height="160"></canvas>
+  <div id="hud-help">W/S thrust &amp; brake &nbsp;·&nbsp; A/D steer &nbsp;·&nbsp; SPACE boost &nbsp;·&nbsp; P pause &nbsp;·&nbsp; R restart &nbsp;·&nbsp; M mute &nbsp;·&nbsp; drag to orbit camera</div>
+</div>
+
+<div id="screen-title" class="screen">
+  <div class="card">
+    <h1>AETHER RUSH</h1>
+    <div class="tagline">A 3D hover-racer above the sunset islands</div>
+    <div class="goal">Race your skiff through <b>12 ring gates</b>, <b>3 laps</b>, before the countdown ends.
+      Gates add +6s and +100. Orbs are +50 and feed your boost. Mines cost 25 hull — dodge them.</div>
+    <div class="controls">
+      <b>W / ↑</b> thrust &nbsp; <b>S / ↓</b> brake &nbsp; <b>A D / ← →</b> steer<br>
+      <b>SPACE</b> boost &nbsp; <b>P</b> pause &nbsp; <b>R</b> restart &nbsp; <b>M</b> mute<br>
+      Drag the mouse to orbit the camera
+    </div>
+    <div class="best" id="title-best">BEST TIME —</div>
+    <button id="btn-start">START RACE</button>
+    <div class="hint">or press ENTER</div>
+  </div>
+</div>
+
+<div id="screen-countdown" class="screen hidden">
+  <div id="countdown-num">3</div>
+</div>
+
+<div id="screen-paused" class="screen hidden">
+  <div class="card">
+    <h2>PAUSED</h2>
+    <div class="goal">Take a breath. The islands will wait.</div>
+    <button id="btn-resume">RESUME</button>
+    <div class="hint">P to resume &nbsp;·&nbsp; R to restart</div>
+  </div>
+</div>
+
+<div id="screen-win" class="screen hidden">
+  <div class="card">
+    <h2 class="win">RACE COMPLETE!</h2>
+    <div class="tagline">Three laps through the sunset — champion of the sky circuit.</div>
+    <div class="stats" id="win-stats"></div>
+    <button id="btn-again-win">RACE AGAIN</button>
+    <div class="hint">or press R / ENTER</div>
+  </div>
+</div>
+
+<div id="screen-lose" class="screen hidden">
+  <div class="card">
+    <h2 class="lose">RACE OVER</h2>
+    <div class="goal" id="lose-reason"></div>
+    <div class="stats" id="lose-stats"></div>
+    <button id="btn-again-lose">TRY AGAIN</button>
+    <div class="hint">or press R / ENTER</div>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
